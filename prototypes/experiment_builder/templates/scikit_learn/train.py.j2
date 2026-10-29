@@ -1,0 +1,57 @@
+"""Fit configured estimators and persist the fitted pipelines."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import joblib
+import pandas as pd
+import yaml
+from sklearn.model_selection import train_test_split
+
+from models import make_pipeline
+
+ROOT = Path(__file__).resolve().parent
+OUTPUTS = ROOT / "outputs"
+
+
+def main() -> None:
+    config = yaml.safe_load((ROOT / "experiment.yaml").read_text(encoding="utf-8"))
+    data = pd.read_csv(ROOT / "data" / "dataset.csv")
+    indices = data.index.to_numpy()
+    target = data[config["target"]]
+    train_indices, test_indices = train_test_split(
+        indices,
+        test_size=config["test_size"],
+        random_state=config["random_seed"],
+        stratify=target if config["task"] == "classification" else None,
+    )
+    train_frame = data.iloc[train_indices]
+    OUTPUTS.joinpath("models").mkdir(parents=True, exist_ok=True)
+    OUTPUTS.joinpath("reports").mkdir(parents=True, exist_ok=True)
+    models = {}
+    for model_config in config["models"]:
+        pipeline = make_pipeline(
+            model_config,
+            train_frame,
+            config["features"],
+            config["random_seed"],
+        )
+        pipeline.fit(
+            train_frame[config["features"]],
+            train_frame[config["target"]],
+        )
+        model_name = model_config["name"]
+        joblib.dump(pipeline, OUTPUTS / "models" / f"{model_name}.joblib")
+        models[model_name] = str(Path("outputs") / "models" / f"{model_name}.joblib")
+    OUTPUTS.joinpath("reports", "split.json").write_text(
+        json.dumps({"train_indices": train_indices.tolist(), "test_indices": test_indices.tolist()}, indent=2),
+        encoding="utf-8",
+    )
+    OUTPUTS.joinpath("reports", "models.json").write_text(json.dumps(models, indent=2), encoding="utf-8")
+    print(f"Fitted {len(models)} model(s). Run `python evaluate.py` for held-out results.")
+
+
+if __name__ == "__main__":
+    main()

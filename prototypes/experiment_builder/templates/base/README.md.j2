@@ -1,0 +1,36 @@
+# {{ project_name }}
+
+Reproducible {{ task }} experiment generated from `experiment.yaml`.
+
+{% if generate_summary %}
+## Configuration
+
+- Framework: scikit-learn
+- Dataset: `data/dataset.csv` (uploaded as `{{ spec.dataset_filename }}`)
+- Target: `{{ target }}`
+- Features: {% for feature in features %}`{{ feature }}`{% if not loop.last %}, {% endif %}{% endfor %}
+- Models: {% for model in models %}`{{ model.name }}`{% if not loop.last %}, {% endif %}{% endfor %}
+- Model parameters: {% for model in models %}`{{ model.name }}` = `{{ model.parameters }}`{% if not loop.last %}; {% endif %}{% endfor %}
+- Test fraction: {{ spec.test_size }}
+- Random seed: {{ spec.random_seed }}
+- Metrics: {% for metric in metrics %}`{{ metric }}`{% if not loop.last %}, {% endif %}{% endfor %}
+{% endif %}
+
+## Run
+
+Create an environment with Python 3.10 or newer, then install dependencies and run:
+
+```powershell
+python -m pip install -r requirements.txt
+python train.py
+python evaluate.py
+```
+
+The split is seeded and stored in `outputs/reports/split.json`. `train.py` fits each
+selected model on training rows only and saves model artifacts. `evaluate.py` computes
+metrics from the held-out rows and saves JSON reports and the selected figures under
+`outputs/`.
+
+Edit `experiment.yaml` to preserve the experiment configuration. The generated
+scripts read it at runtime, so changes to the task, selected columns, models, split,
+seed, metrics, and outputs remain explicit and reviewable.

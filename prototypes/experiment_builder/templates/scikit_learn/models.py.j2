@@ -1,0 +1,53 @@
+"""Scikit-learn model and leakage-safe preprocessing factories."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
+
+
+def make_preprocessor(frame: pd.DataFrame, features: list[str]) -> ColumnTransformer:
+    numeric = [name for name in features if pd.api.types.is_numeric_dtype(frame[name].dtype)]
+    categorical = [name for name in features if name not in numeric]
+    transformers: list[tuple[str, Any, list[str]]] = []
+    if numeric:
+        transformers.append(("numeric", SimpleImputer(strategy="median"), numeric))
+    if categorical:
+        categorical_steps = Pipeline(
+            [
+                ("imputer", SimpleImputer(strategy="most_frequent")),
+                ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+            ],
+        )
+        transformers.append(("categorical", categorical_steps, categorical))
+    return ColumnTransformer(transformers, remainder="drop", verbose_feature_names_out=False)
+
+
+def make_estimator(model: dict[str, Any], seed: int):
+    name = model["name"]
+    parameters = dict(model.get("parameters", {}))
+    if name == "linear_regression":
+        return LinearRegression(**parameters)
+    if name == "random_forest_regressor":
+        return RandomForestRegressor(random_state=seed, n_jobs=-1, **parameters)
+    if name == "logistic_regression":
+        return LogisticRegression(max_iter=1000, random_state=seed, **parameters)
+    if name == "random_forest_classifier":
+        return RandomForestClassifier(random_state=seed, n_jobs=-1, **parameters)
+    raise ValueError(f"Unsupported model: {name}")
+
+
+def make_pipeline(model: dict[str, Any], frame: pd.DataFrame, features: list[str], seed: int):
+    return Pipeline(
+        [
+            ("preprocessor", make_preprocessor(frame, features)),
+            ("estimator", make_estimator(model, seed)),
+        ],
+    )
